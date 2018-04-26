@@ -60,11 +60,11 @@ int main(int argc, char** argv)
     ros::Subscriber sub1 = n.subscribe("/base_pose_ground_truth", 10, posecallback);
    
     // Define a frequencia do no
-    ros::Rate loop_rate(2);
+    ros::Rate loop_rate(0.5);
 
     // Declaracoes
     geometry_msgs::Twist speed_create;  // Comando de Velocidade
-    double v1=1.0, v2=0.0;              // Velocidades
+    double v1=0.0, v2=2.0;              // Velocidades
     double goalx, goaly;                 // Alvos
 	double orientation;					// Orientacao do robo
 
@@ -93,19 +93,17 @@ int main(int argc, char** argv)
 
     //Loop Principal
     while(ros::ok()) 
-    {
+    {  
 
-        // Calcula velocidade
-        // current_pose.pose.pose.orientation;
-        // tf::q
-	
-	// criar funcao que recebe goal e retorna velocidades
-	// usar essa funcao para passar goals intermediarios
-	// usar RRT (usar goal como aleatorio)?	
+        // Pega a orientacao em graus (-180,180)
+		orientation = tf::getYaw(current_pose.pose.pose.orientation);   // getYaw recebe quaternion e converte para radianos
+        orientation = orientation*180/M_PI;                             // Converte de radianos para graus
+        // ROS_INFO("%lg", orientation); // Debugging
 
-        //  Seu codigo .....
-		orientacao = tf::getYaw(current_pose.pose.pose.orientation);
-		orientacao = orientacao*180/M_pi?
+        // CONTINUAR LOGICA
+        // criar funcao que recebe goal e retorna velocidades
+        // usar essa funcao para passar goals intermediarios
+        // usar RRT (usar goal como aleatorio)?	
 
         // Envia Sinal de Velocidade
         speed_create.linear.x=v1;

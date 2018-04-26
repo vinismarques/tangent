@@ -3,7 +3,7 @@ define hokuyo ranger
 	sensor( 			
     range [ 0.0  30.0 ]
     fov 270.25
-   samples 10
+   samples 1081
   )
 
   # generic model properties
