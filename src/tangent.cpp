@@ -19,7 +19,7 @@ sensor_msgs::LaserScan current_laser;
 //Funcao Callback do Laser
 void lasercallback(const sensor_msgs::LaserScan::ConstPtr& laser)
 {
-	current_laser = *laser;
+    current_laser = *laser;
     // printf("%lu\n", sizeof(current_laser.ranges));
     // printf("%lu\n", ARRAY_SIZE(current_laser.ranges));
     // int array_teste[10] = {1, 2, 3, 4, 5};
