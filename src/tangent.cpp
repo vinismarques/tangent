@@ -25,7 +25,7 @@ void lasercallback(const sensor_msgs::LaserScan::ConstPtr& laser)
     // int array_teste[10] = {1, 2, 3, 4, 5};
     // printf("%lu\n", ARRAY_SIZE(array_teste));
 
-	// for (int i = 1; i <= ARRAY_SIZE(current_laser.ranges); i++)
+    // for (int i = 1; i <= ARRAY_SIZE(current_laser.ranges); i++)
     // {
     //     printf("%lf ", current_laser.ranges[i]);
     // }
@@ -66,7 +66,7 @@ int main(int argc, char** argv)
     geometry_msgs::Twist speed_create;  // Comando de Velocidade
     double v1=0.0, v2=2.0;              // Velocidades
     double goalx, goaly;                 // Alvos
-	double orientation;					// Orientacao do robo
+    double orientation;					// Orientacao do robo
 
     // printf("argc=%d\n", argc);
 
@@ -96,7 +96,7 @@ int main(int argc, char** argv)
     {  
 
         // Pega a orientacao em graus (-180,180)
-		orientation = tf::getYaw(current_pose.pose.pose.orientation);   // getYaw recebe quaternion e converte para radianos
+        orientation = tf::getYaw(current_pose.pose.pose.orientation);   // getYaw recebe quaternion e converte para radianos
         orientation = orientation*180/M_PI;                             // Converte de radianos para graus
         // ROS_INFO("%lg", orientation); // Debugging
 
