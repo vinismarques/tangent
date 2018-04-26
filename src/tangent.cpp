@@ -66,6 +66,7 @@ int main(int argc, char** argv)
     geometry_msgs::Twist speed_create;  // Comando de Velocidade
     double v1=1.0, v2=0.0;              // Velocidades
     double goalx, goaly;                 // Alvos
+	double orientation;					// Orientacao do robo
 
     // printf("argc=%d\n", argc);
 
@@ -99,7 +100,8 @@ int main(int argc, char** argv)
         // tf::q
 
         //  Seu codigo .....
-                
+		orientacao = tf::getYaw(current_pose.pose.pose.orientation);
+		orientacao = orientacao*
 
         // Envia Sinal de Velocidade
         speed_create.linear.x=v1;
