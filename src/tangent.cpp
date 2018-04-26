@@ -98,10 +98,14 @@ int main(int argc, char** argv)
         // Calcula velocidade
         // current_pose.pose.pose.orientation;
         // tf::q
+	
+	// criar funcao que recebe goal e retorna velocidades
+	// usar essa funcao para passar goals intermediarios
+	// usar RRT (usar goal como aleatorio)?	
 
         //  Seu codigo .....
 		orientacao = tf::getYaw(current_pose.pose.pose.orientation);
-		orientacao = orientacao*
+		orientacao = orientacao*180/M_pi?
 
         // Envia Sinal de Velocidade
         speed_create.linear.x=v1;
