@@ -1,0 +1,5 @@
+<launch>
+	<node name="stageros" pkg="stage_ros" type="stageros" args="$(find stage_ros)/world/willow-erratic.world"/>
+	<node name="Path" pkg="tangent" type="tangent_node" args="10.0 10.0" output="screen" />
+	<node name="rviz" pkg="rviz" type="rviz" args="-d $(find tangent)/rviz/setup.rviz" />
+</launch>
