@@ -10,7 +10,7 @@
 #include "std_msgs/String.h"
 #include <tf/transform_datatypes.h>
 
-#define ARRAY_SIZE(array) (sizeof((array))/sizeof((array[0])))
+// #define ARRAY_SIZE(array) (sizeof((array))/sizeof((array[0])))
 
 //Variaveis Globais Para Leitura de Dados
 nav_msgs::Odometry current_pose;
@@ -60,13 +60,16 @@ int main(int argc, char** argv)
     ros::Subscriber sub1 = n.subscribe("/base_pose_ground_truth", 10, posecallback);
    
     // Define a frequencia do no
-    ros::Rate loop_rate(0.5);
+    ros::Rate loop_rate(100);
 
     // Declaracoes
     geometry_msgs::Twist speed_create;  // Comando de Velocidade
-    double v1=0.0, v2=2.0;              // Velocidades
+    double v1=0.0, v2=0.0;              // Velocidades
     double goalx, goaly;                 // Alvos
     double orientation;					// Orientacao do robo
+    double x_robo;
+    double y_robo;
+    double alfa = 0, beta = 0, d = 0, h = 0; //d = distancia, h = altura
 
     // printf("argc=%d\n", argc);
 
@@ -94,11 +97,45 @@ int main(int argc, char** argv)
     //Loop Principal
     while(ros::ok()) 
     {  
-
+                       
         // Pega a orientacao em graus (-180,180)
-        orientation = tf::getYaw(current_pose.pose.pose.orientation);   // getYaw recebe quaternion e converte para radianos
-        orientation = orientation*180/M_PI;                             // Converte de radianos para graus
-        // ROS_INFO("%lg", orientation); // Debugging
+        orientation = tf::getYaw(current_pose.pose.pose.orientation);// getYaw recebe quaternion e converte para radianos
+ 	x_robo = current_pose.pose.pose.position.x;
+	y_robo = current_pose.pose.pose.position.y;
+        beta = orientation*180/M_PI;// Converte de radianos para graus
+	d = sqrt((goalx - x_robo)*(goalx - x_robo) + (goaly - y_robo)*(goaly - y_robo));
+	h = goaly - y_robo;
+	alfa = acos(h/d)*(180/M_PI);
+	
+	//definicoes de quadrante
+	//segundo quadrante	
+	if(h > 0 && goalx - x_robo < 0 ){
+		alfa = alfa + 90;
+	}
+
+	//terceiro quadrante
+	if(h < 0 && goalx - x_robo < 0){
+		alfa = alfa - 270;
+	}
+
+	//quarto quadrante	
+	if(h < 0 && goalx - x_robo > 0 ){
+		alfa = alfa - 180;
+	}
+
+	if(beta - alfa > 0){
+		v2=-0.1;	
+	}
+	
+	if(beta - alfa < 0){
+		v2=0.1;	
+	}
+
+	if(beta - alfa == 0){
+		v2=0;	
+	}
+	
+	ROS_INFO("%lg, %lg, %lg, %lg", beta, alfa, d, h); // Debugging
 
         // CONTINUAR LOGICA
         // criar funcao que recebe goal e retorna velocidades

@@ -1,5 +1,0 @@
-<launch>
-	<node name="stageros" pkg="stage_ros" type="stageros" args="$(find tangent)/world/create_hokuyo.world"/>
-	<node name="Path" pkg="tangent" type="tangent_node" args="0.0 0.0" />
-	<node name="rviz" pkg="rviz" type="rviz" args="-d $(find tangent)/rviz/setup.rviz" />
-</launch>
