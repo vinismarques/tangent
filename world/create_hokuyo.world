@@ -3,25 +3,25 @@ define hokuyo ranger
 	sensor( 			
     range [ 0.0  30.0 ]
     fov 270.25
-    samples 1081
+   samples 1081
   )
 
   # generic model properties
   color "red"
-  size [ 0.050 0.050 0.100 ]
+  size [ 0.05 0.05 0.1 ]
 )
 
 define roomba position
 (
-  	size [0.350 0.350 0.250]
+  	size [0.35 0.35 0.25]
 
   	# This block approximates the circular shape of a Roomba
  	
-    origin [-0.050 0.000 0.000 0.000]
+    origin [-0.05 0 0 0]
   	color "red"
   	gui_nose 1
     drive "diff"
-  	hokuyo( pose [0.050 0.000 0.000 0.000] )
+  	hokuyo( pose [0.050 0.000 0 0.000] )
 )
 
 
@@ -45,14 +45,14 @@ define floorplan model
 # set the resolution of the underlying raytrace model in meters
 resolution 0.02
 
-interval_sim 100  # simulation timestep in milliseconds
+interval_sim 100  # simulation timestep in milliseconds (default 100)
 
 
 window
 ( 
-  size [ 800 600 ] 
+  size [ 800.000 600.000 ] 
   rotate [ 0.000 0.000 ]
-  center [ 10.500  8.000 ]
+  center [ 10.5  8 ]
   scale 28.806 
   show_data 1
   show_footprints 1
@@ -64,12 +64,12 @@ floorplan
 ( 
   name "Mapa"
   bitmap "map.pgm"
-  size [21.000 16.000 0.500]
-  pose [ 10.500 8.000 0.000 0.000 ]
+  size [21 16 0.5]
+  pose [ 10.5 8 0 0 ]
 )
 
 
 #roomba( pose [ 9 9 0 0 ] name "roomba_0" color "green")
-#roomba( pose [ 8 8 0 0 ] name "roomba_1" color "blue")
+#roomba( pose [ 9 8 0 0 ] name "roomba_1" color "blue")
 #roomba( pose [ 8 9 0 0 ] name "roomba_2" color "red")
-roomba( pose [ 8.000 8.000 0.000 0.000 ]  name "roomba_3" color "purple")
+roomba( pose [ 8 8 0 0 ]  name "roomba_3" color "purple")
