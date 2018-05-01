@@ -72,4 +72,4 @@ floorplan
 #roomba( pose [ 9 9 0 0 ] name "roomba_0" color "green")
 #roomba( pose [ 9 8 0 0 ] name "roomba_1" color "blue")
 #roomba( pose [ 8 9 0 0 ] name "roomba_2" color "red")
-roomba( pose [ 8 8 0 0 ]  name "roomba_3" color "purple")
+roomba( pose [ 8 4 0 0 ]  name "roomba_3" color "purple")
