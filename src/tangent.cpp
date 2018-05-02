@@ -15,20 +15,19 @@ nav_msgs::Odometry current_pose;
 sensor_msgs::LaserScan current_laser;
 double v1 = 0.0, v2 = 0.0; // Velocidades
 double tol = 0.4;          // Distancia de tolerancia do robo ate a parede
-double alfa, beta;         // alfa = angulo do goal local em relacao ao frame. beta = angulo do robo em relacao ao frame
-int estado = 0;
-bool at_goal = false;
+double alfa, beta;         // alfa = angulo do goal local em relacao ao robo. beta = angulo do robo em relacao ao frame
+int estado = 0;            // Variavel utilizada na maquina de estados
 bool seguir_esquerda = false, seguir_direita = false, rotate2follow = true, create_rotation_target = true;
-double prec_ang = 0.1, prec_lin = 0.1;
-double k1 = 0.4, k2 = 0.06;
-double orientacao; // Orientacao do robo
-double erro_lin, erro_ang;
-double difx, dify;
-double localx, localy; // Alvo local
-double robox, roboy;
-double dist; // Distancia entre o robo e goal global
-double angulo = -45; // Valor inicial da variavel angulo. Utilizada para criar targets de rotacao
-float esq90, esq45, frente, dir45, dir90;
+double prec_ang = 0.1, prec_lin = 0.1;    // Precisoes exigidas que os controladores respeitem
+double k1 = 0.4, k2 = 0.06;               // k1: ganho do controle linear; k2: ganho do controle angular
+double orientacao;                        // Orientacao do robo em radianos
+double erro_lin, erro_ang;                // Erro linear e erro angular
+double difx, dify;                        // Diferenca da posicao do robo e do goal local
+double localx, localy;                    // Goal local
+double robox, roboy;                      // Valores em x e y da posicao do robo
+double dist;                              // Distancia entre o robo e goal global
+double angulo = -45;                      // Valor inicial da variavel angulo. Utilizada para criar targets de rotacao
+float esq90, esq45, frente, dir45, dir90; // Variaveis de leitura do sensor laser
 
 //Funcao Callback do Laser
 void lasercallback(const sensor_msgs::LaserScan::ConstPtr &laser)
@@ -260,16 +259,16 @@ double segue_parede_direita(double tol)
         }
         if (frente <= tol) // Obstaculo a frente. Rotaciona 45 graus para a esquerda
         {
-            rotate2follow = true;          // Habilita rotina de rotacao forcada
-            create_rotation_target = true; // Habilita criar um novo target
-            angulo = 45;                  // Valor de rotacao usado para criar novo target
+            rotate2follow = true;                                   // Habilita rotina de rotacao forcada
+            create_rotation_target = true;                          // Habilita criar um novo target
+            angulo = 45;                                            // Valor de rotacao usado para criar novo target
             ROS_WARN("Obstaculo a FRENTE. Distancia: %lg", frente); // Debugging
         }
         else if (dir45 <= tol) // Osbtaculo imediatamente a direita. Rotaciona 20 graus para a esquerda
         {
-            rotate2follow = true;          // Habilita rotina de rotacao forcada
-            create_rotation_target = true; // Habilita criar um novo target
-            angulo = 20;                  // Valor de rotacao usado para criar novo target
+            rotate2follow = true;                                             // Habilita rotina de rotacao forcada
+            create_rotation_target = true;                                    // Habilita criar um novo target
+            angulo = 20;                                                      // Valor de rotacao usado para criar novo target
             ROS_WARN("Obstaculo 45 graus na direita. Distancia: %lg", dir45); // Debugging
         }
         ROS_INFO("dir90=%lg dir45=%lg frent=%lg", dir90, dir45, frente);
@@ -360,7 +359,8 @@ int main(int argc, char **argv)
         robox = current_pose.pose.pose.position.x;                   // Posicao atual do robo em x
         roboy = current_pose.pose.pose.position.y;                   // Posicao atual do robo em y
 
-        dist = sqrt((goalx - robox) * (goalx - robox) + (goaly - roboy) * (goaly - roboy)); // Distancia do robo ate o goal global
+        // Distancia do robo ate o goal global
+        dist = sqrt((goalx - robox) * (goalx - robox) + (goaly - roboy) * (goaly - roboy));
 
         // Relacoes entre robo e goal local
         difx = localx - robox;                      // Diferenca entre posicao x do goal local e do robo
@@ -408,7 +408,6 @@ int main(int argc, char **argv)
                 }
                 // ROS_INFO("Validou entrada no threshold do erro do angulo.");
             }
-
         }
 
         // ROS_INFO("ESTADO = %d", estado); // Debugging
@@ -417,14 +416,9 @@ int main(int argc, char **argv)
         // Estado final, encerra o nodo
         if (estado == 2)
         {
-            ROS_INFO("O robo chegou no GOAL!");
+            ROS_INFO("O robo chegou ao GOAL!");
             return 0;
         }
-
-        // IDEIAS
-        // criar funcao que recebe goal e retorna velocidades?
-        // usar essa funcao para passar goals intermediarios
-        // usar RRT (usar goal como aleatorio)?
 
         // Envia Sinal de Velocidade
         speed_create.linear.x = v1;
