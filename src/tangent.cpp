@@ -19,7 +19,7 @@ double alfa, beta;         // alfa = angulo do goal local em relacao ao robo. be
 int estado = 0;            // Variavel utilizada na maquina de estados
 bool seguir_esquerda = false, seguir_direita = false, rotate2follow = true, create_rotation_target = true;
 double prec_ang = 0.1, prec_lin = 0.1;    // Precisoes exigidas que os controladores respeitem
-double k1 = 0.4, k2 = 0.06;               // k1: ganho do controle linear; k2: ganho do controle angular
+double k1 = 0.9, k2 = 0.06;               // k1: ganho do controle linear; k2: ganho do controle angular
 double orientacao;                        // Orientacao do robo em radianos
 double erro_lin, erro_ang;                // Erro linear e erro angular
 double difx, dify;                        // Diferenca da posicao do robo e do goal local
@@ -399,7 +399,7 @@ int main(int argc, char **argv)
             if (modulo(erro_ang_global) <= 4) // Threshold do erro do angulo
             {
                 // ROS_INFO("frente=%lg dist=%lg", alfa_laser, erro_ang_global);
-                if (frente >= dist) // Vai para a rotina movetogoal
+                if (frente >= dist && esq45 > tol) // Vai para a rotina movetogoal
                 {
                     ROS_INFO("Caminho ate o goal livre. Iniciando rotina movetogoal.");
                     localx = goalx;
