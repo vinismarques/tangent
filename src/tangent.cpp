@@ -416,7 +416,7 @@ int main(int argc, char **argv)
         // Estado final, encerra o nodo
         if (estado == 2)
         {
-            ROS_INFO("O robo chegou ao GOAL!");
+            ROS_WARN("O robo chegou ao GOAL!");
             return 0;
         }
 
