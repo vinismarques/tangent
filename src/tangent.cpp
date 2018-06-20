@@ -9,12 +9,25 @@
 #include <nav_msgs/Odometry.h>
 #include "std_msgs/String.h"
 #include <tf/transform_datatypes.h>
+#include <vector>
+#include <visualization_msgs/MarkerArray.h>
+#include <tf/transform_broadcaster.h>
+
+using namespace std;
+
+#define GRID_RES_X 2 // cells per meters (cell density)
+#define GRID_RES_Y 2
+
+const int GRID_WIDTH = 43,
+          GRID_HEIGHT = 33;
+
+char gMap[GRID_HEIGHT][GRID_WIDTH];
 
 //Variaveis Globais Para Leitura de Dados
 nav_msgs::Odometry current_pose;
 sensor_msgs::LaserScan current_laser;
 double v1 = 0.0, v2 = 0.0; // Velocidades
-double tol = 0.4;          // Distancia de tolerancia do robo ate a parede
+double tol = 0.5;          // Distancia de tolerancia do robo ate a parede
 double alfa, beta;         // alfa = angulo do goal local em relacao ao robo. beta = angulo do robo em relacao ao frame
 int estado = 0;            // Variavel utilizada na maquina de estados
 bool seguir_esquerda = false, seguir_direita = false, rotate2follow = true, create_rotation_target = true;
@@ -28,11 +41,15 @@ double robox, roboy;                      // Valores em x e y da posicao do robo
 double dist;                              // Distancia entre o robo e goal global
 double angulo = -45;                      // Valor inicial da variavel angulo. Utilizada para criar targets de rotacao
 float esq90, esq45, frente, dir45, dir90; // Variaveis de leitura do sensor laser
+bool laserReady = false, odomReady = false;
+
+
 
 //Funcao Callback do Laser
 void lasercallback(const sensor_msgs::LaserScan::ConstPtr &laser)
 {
     current_laser = *laser;
+    laserReady = true;
 
     return;
 }
@@ -41,8 +58,27 @@ void lasercallback(const sensor_msgs::LaserScan::ConstPtr &laser)
 void posecallback(const nav_msgs::Odometry::ConstPtr &pose)
 {
     current_pose = *pose;
+    odomReady = true;
 
     return;
+}
+
+void loadMap(string fileName)
+{
+    FILE *f = fopen(fileName.c_str(), "r");
+    int v;
+    for (unsigned i = 0; i < GRID_HEIGHT; i++)
+    {
+        for (unsigned j = 0; j < GRID_WIDTH; j++)
+        {
+            fscanf(f, "%d,", &v);
+            gMap[i][j] = v;
+            // printf("%d ", gMap[i][j]);
+        }
+        // printf("\n");
+    }
+    fclose(f);
+    // printf("\n\n");
 }
 
 //Funcao Modulo
@@ -196,7 +232,7 @@ double segue_parede_esquerda(double tol)
             angulo = -45;                  // Valor de rotacao usado para criar novo target
             // ROS_WARN("Obstaculo a frente. Distancia: %lg", frente); // Debugging
         }
-        else if (esq45 <= tol) // Osbtaculo imediatamente a esquerda. Rotaciona 20 graus para a direita
+        else if (esq45 <= tol || dir45 <= tol/2) // Osbtaculo imediatamente a esquerda. Rotaciona 20 graus para a direita
         {
             rotate2follow = true;          // Habilita rotina de rotacao forcada
             create_rotation_target = true; // Habilita criar um novo target
@@ -309,11 +345,22 @@ int main(int argc, char **argv)
     double erro_ang_global;            // Erro angular entre o feixe de laser e o goal global
 
     // Faz Leitura dos Parametros para o GOAL
-    if (argc == 1)
+    if (argc == 2)
     {
-        printf("Definido Padrao Aleatorio\n");
+        printf("Iniciando limpeza do chao\n");
+        loadMap(argv[1]);
+
+        for (signed i = (GRID_HEIGHT - 1); i > -1; i--)
+        {
+            for (unsigned j = 0; j < GRID_WIDTH; j++)
+            {
+                printf("%d ", gMap[i][j]);
+            }
+            printf("\n");
+        }
+
         srand(time(NULL));
-        goalx = double(rand() % 200) / 10.0;
+        goalx = double(rand() % 150) / 10.0;
         srand(time(NULL));
         goaly = double(rand() % 150) / 10.0;
 
@@ -322,10 +369,10 @@ int main(int argc, char **argv)
     }
     else
     {
-        if (argc == 3)
+        if (argc == 4)
         {
-            goalx = atof(argv[1]);
-            goaly = atof(argv[2]);
+            goalx = atof(argv[2]);
+            goaly = atof(argv[3]);
             printf("Definido GOAL %lf %lf\n", goalx, goaly);
         }
         else
@@ -339,8 +386,14 @@ int main(int argc, char **argv)
     localx = goalx;
     localy = goaly;
 
-    sleep(1);        // Aguarda 1 seg antes de iniciar para evitar warnings de "Quaternion Not Properly Normalized"
-    ros::spinOnce(); // Evita ler sensor antes de o ter inicializado
+    // Wait sensors be ready
+    while (!laserReady || !odomReady)
+    {
+        ros::spinOnce();
+        loop_rate.sleep();
+        if (!ros::ok())
+            break;
+    }
 
     //Loop Principal
     while (ros::ok())
@@ -417,7 +470,19 @@ int main(int argc, char **argv)
         if (estado == 2)
         {
             ROS_WARN("O robo chegou ao GOAL!");
-            return 0;
+
+            srand(time(NULL));
+            goalx = double(rand() % 150) / 10.0;
+            // srand(time(NULL));
+            goaly = double(rand() % 150) / 10.0;
+            // Printa o GOAL no terminal
+            ROS_INFO("GOAL aleatorio: x=%lf, y=%lf", goalx, goaly);
+
+            localx = goalx;
+            localy = goaly;
+            estado = 0;
+
+            // return 0;
         }
 
         // Envia Sinal de Velocidade
