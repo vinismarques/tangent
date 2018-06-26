@@ -1,3 +1,9 @@
+//
+// TO-DO:   corrigir sentido de rotacao (escolher menor lado)
+//          verificar rand()
+//          corrigir comportamento no segue parede?
+//
+
 #include <cstdio>
 #include <cstdlib>
 #include <ctime>
@@ -27,12 +33,18 @@ char gMap[GRID_HEIGHT][GRID_WIDTH];
 nav_msgs::Odometry current_pose;
 sensor_msgs::LaserScan current_laser;
 double v1 = 0.0, v2 = 0.0; // Velocidades
-double tol = 0.5;          // Distancia de tolerancia do robo ate a parede
+double tol = 0.4;          // Distancia de tolerancia do robo ate a parede
 double alfa, beta;         // alfa = angulo do goal local em relacao ao robo. beta = angulo do robo em relacao ao frame
 int estado = 0;            // Variavel utilizada na maquina de estados
 bool seguir_esquerda = false, seguir_direita = false, rotate2follow = true, create_rotation_target = true;
 double prec_ang = 0.1, prec_lin = 0.1;    // Precisoes exigidas que os controladores respeitem
-double k1 = 0.9, k2 = 0.06;               // k1: ganho do controle linear; k2: ganho do controle angular
+double kp1 = 0.9,                         // kp1: ganho proporcional do controle linear
+    kp2 = 0.06;                           // kp2: ganho proporcional do controle angular
+double ki1 = 0.0,                         // ki1: ganho integal do controle linear
+    ki2 = 0.0,                            // ki2: ganho integral do controle angular
+    integral1 = 0.5,                        // integral do erro linear
+    integral2 = 0.5,                        // integral do erro angular
+    dt = 1;                             // constante de tempo
 double orientacao;                        // Orientacao do robo em radianos
 double erro_lin, erro_ang;                // Erro linear e erro angular
 double difx, dify;                        // Diferenca da posicao do robo e do goal local
@@ -42,8 +54,6 @@ double dist;                              // Distancia entre o robo e goal globa
 double angulo = -45;                      // Valor inicial da variavel angulo. Utilizada para criar targets de rotacao
 float esq90, esq45, frente, dir45, dir90; // Variaveis de leitura do sensor laser
 bool laserReady = false, odomReady = false;
-
-
 
 //Funcao Callback do Laser
 void lasercallback(const sensor_msgs::LaserScan::ConstPtr &laser)
@@ -105,38 +115,39 @@ double graus(double orientacao)
 }
 
 // Funcao que rotaciona de acordo com diferenca de angulos (goal-robo)
-double rotaciona(double erro_ang, double prec_ang, double k2)
+double rotaciona(double erro_ang, double prec_ang, double kp2)
 {
     if (modulo(erro_ang) > prec_ang) // Define sentido de rotacao. Escolhe o com menor diferenca
     {
         if (erro_ang > 0 && erro_ang <= 180) // Rotaciona no sentido anti-horario
         {
-
-            return modulo(erro_ang) * k2;
+            integral2 += modulo(erro_ang * dt);
+            return modulo(erro_ang) * (kp2 + ki2 * integral2);
         }
         else // Rotaciona no sentido horario
         {
-
-            return -modulo(erro_ang) * k2;
+            integral2 += modulo(erro_ang * dt);
+            return -modulo(erro_ang) * (kp2 + ki2 * integral2);
         }
     }
     else // Precisao angular atingida, para de rotacionar
     {
+        integral2 = 0;
         return 0.0;
     }
 }
 
 // Funcao que trata o movimento linear
-double anda(double erro_lin, double prec_lin, double k1)
+double anda(double erro_lin, double prec_lin, double kp1)
 {
     if (erro_lin >= prec_lin) // Realimenta o erro multiplicado por um ganho
     {
-
-        return modulo(erro_lin) * k1;
+        integral1 += modulo(erro_lin * dt);
+        return modulo(erro_lin) * (kp1 + ki1 * integral1);
     }
     else // Precisao linear atingida, para de andar
     {
-
+        integral1 = 0;
         return 0.0;
     }
 }
@@ -147,7 +158,7 @@ void movetogoal(double localx, double localy, double robox, double roboy)
     if (modulo(erro_ang) >= prec_ang) // Continua movimento angular
     {
         v1 = 0;
-        v2 = rotaciona(erro_ang, prec_ang, k2);
+        v2 = rotaciona(erro_ang, prec_ang, kp2);
     }
     else
     {
@@ -160,12 +171,12 @@ void movetogoal(double localx, double localy, double robox, double roboy)
         }
         else // Continua movimento linear
         {
-            v1 = anda(erro_lin, prec_lin, k1);
+            v1 = anda(erro_lin, prec_lin, kp1);
         }
     }
 
     // Checa se o goal e alcancavel, se nao, retorna que chegou o mais proximo possivel
-    if (frente < tol && dist < 1.5)
+    if ((frente || esq45 || dir45) < tol && dist < 1.5)
     {
         v1 = 0;
         v2 = 0;
@@ -200,8 +211,8 @@ double segue_parede_esquerda(double tol)
         else // Se o target já existe, rotacionar ate alcanca-lo
         {
 
-            v2 = rotaciona(erro_ang, prec_ang, k2); // Usa os pontos criados por define_rotation_target()
-            if (modulo(erro_ang) < prec_ang)        // Se satisfazer, significa que a precisao ja foi alcancada
+            v2 = rotaciona(erro_ang, prec_ang, kp2); // Usa os pontos criados por define_rotation_target()
+            if (modulo(erro_ang) < prec_ang)         // Se satisfazer, significa que a precisao ja foi alcancada
             {
                 rotate2follow = false; // Vai pra rotina automatica
             }
@@ -232,7 +243,7 @@ double segue_parede_esquerda(double tol)
             angulo = -45;                  // Valor de rotacao usado para criar novo target
             // ROS_WARN("Obstaculo a frente. Distancia: %lg", frente); // Debugging
         }
-        else if (esq45 <= tol || dir45 <= tol/2) // Osbtaculo imediatamente a esquerda. Rotaciona 20 graus para a direita
+        else if (esq45 <= tol || dir45 <= tol / 2) // Osbtaculo imediatamente a esquerda. Rotaciona 20 graus para a direita
         {
             rotate2follow = true;          // Habilita rotina de rotacao forcada
             create_rotation_target = true; // Habilita criar um novo target
@@ -268,8 +279,8 @@ double segue_parede_direita(double tol)
         else // Se o target já existe, rotacionar ate alcanca-lo
         {
 
-            v2 = rotaciona(erro_ang, prec_ang, k2); // Usa os pontos criados por define_rotation_target()
-            if (modulo(erro_ang) < prec_ang)        // Se satisfazer, significa que a precisao ja foi alcancada
+            v2 = rotaciona(erro_ang, prec_ang, kp2); // Usa os pontos criados por define_rotation_target()
+            if (modulo(erro_ang) < prec_ang)         // Se satisfazer, significa que a precisao ja foi alcancada
             {
                 rotate2follow = false; // Vai pra rotina automatica
             }
@@ -361,7 +372,6 @@ int main(int argc, char **argv)
 
         srand(time(NULL));
         goalx = double(rand() % 150) / 10.0;
-        srand(time(NULL));
         goaly = double(rand() % 150) / 10.0;
 
         // Printa o GOAL no terminal
@@ -471,9 +481,7 @@ int main(int argc, char **argv)
         {
             ROS_WARN("O robo chegou ao GOAL!");
 
-            srand(time(NULL));
             goalx = double(rand() % 150) / 10.0;
-            // srand(time(NULL));
             goaly = double(rand() % 150) / 10.0;
             // Printa o GOAL no terminal
             ROS_INFO("GOAL aleatorio: x=%lf, y=%lf", goalx, goaly);
