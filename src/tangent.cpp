@@ -19,6 +19,16 @@
 #include <visualization_msgs/MarkerArray.h>
 #include <tf/transform_broadcaster.h>
 
+#include <iostream>
+#include <iomanip>
+#include <map>
+#include <set>
+#include <array>
+#include <utility>
+#include <queue>
+#include <tuple>
+#include <algorithm>
+
 using namespace std;
 
 #define GRID_RES_X 2 // cells per meters (cell density)
@@ -27,7 +37,7 @@ using namespace std;
 const int GRID_WIDTH = 43,
           GRID_HEIGHT = 33;
 
-char gMap[GRID_HEIGHT][GRID_WIDTH];
+// char gMap[GRID_HEIGHT][GRID_WIDTH];
 
 //Variaveis Globais Para Leitura de Dados
 nav_msgs::Odometry current_pose;
@@ -36,15 +46,17 @@ double v1 = 0.0, v2 = 0.0; // Velocidades
 double tol = 0.4;          // Distancia de tolerancia do robo ate a parede
 double alfa, beta;         // alfa = angulo do goal local em relacao ao robo. beta = angulo do robo em relacao ao frame
 int estado = 0;            // Variavel utilizada na maquina de estados
+int mapRobox, mapRoboy,
+    mapGoalx, mapGoaly; // Variavel da posicao do mapa
 bool seguir_esquerda = false, seguir_direita = false, rotate2follow = true, create_rotation_target = true;
 double prec_ang = 0.1, prec_lin = 0.1;    // Precisoes exigidas que os controladores respeitem
 double kp1 = 0.9,                         // kp1: ganho proporcional do controle linear
     kp2 = 0.06;                           // kp2: ganho proporcional do controle angular
 double ki1 = 0.0,                         // ki1: ganho integal do controle linear
     ki2 = 0.0,                            // ki2: ganho integral do controle angular
-    integral1 = 0.5,                        // integral do erro linear
-    integral2 = 0.5,                        // integral do erro angular
-    dt = 1;                             // constante de tempo
+    integral1 = 0.5,                      // integral do erro linear
+    integral2 = 0.5,                      // integral do erro angular
+    dt = 1;                               // constante de tempo
 double orientacao;                        // Orientacao do robo em radianos
 double erro_lin, erro_ang;                // Erro linear e erro angular
 double difx, dify;                        // Diferenca da posicao do robo e do goal local
@@ -73,6 +85,7 @@ void posecallback(const nav_msgs::Odometry::ConstPtr &pose)
     return;
 }
 
+/*
 void loadMap(string fileName)
 {
     FILE *f = fopen(fileName.c_str(), "r");
@@ -90,6 +103,7 @@ void loadMap(string fileName)
     fclose(f);
     // printf("\n\n");
 }
+*/
 
 //Funcao Modulo
 double modulo(double valor)
@@ -332,6 +346,233 @@ double segue_parede_direita(double tol)
     }
 }
 
+struct GridLocation
+{
+    int x, y;
+};
+
+struct SquareGrid
+{
+    static array<GridLocation, 4> DIRS;
+
+    int width, height;
+    set<GridLocation> walls;
+
+    SquareGrid(int width_, int height_)
+        : width(width_), height(height_) {}
+
+    bool in_bounds(GridLocation id) const
+    {
+        return 0 <= id.x && id.x < width && 0 <= id.y && id.y < height;
+    }
+
+    bool passable(GridLocation id) const
+    {
+        return walls.find(id) == walls.end();
+    }
+
+    vector<GridLocation> neighbors(GridLocation id) const
+    {
+        vector<GridLocation> results;
+
+        for (GridLocation dir : DIRS)
+        {
+            GridLocation next{id.x + dir.x, id.y + dir.y};
+            if (in_bounds(next) && passable(next))
+            {
+                results.push_back(next);
+            }
+        }
+
+        // if ((id.x + id.y) % 2 == 0) {
+        //   // aesthetic improvement on square grids
+        //   reverse(results.begin(), results.end());
+        // }
+
+        return results;
+    }
+};
+
+array<GridLocation, 4> SquareGrid::DIRS =
+    {GridLocation{1, 0}, GridLocation{0, -1}, GridLocation{-1, 0}, GridLocation{0, 1}};
+
+bool operator==(GridLocation a, GridLocation b)
+{
+    return a.x == b.x && a.y == b.y;
+}
+
+bool operator!=(GridLocation a, GridLocation b)
+{
+    return !(a == b);
+}
+
+bool operator<(GridLocation a, GridLocation b)
+{
+    return tie(a.x, a.y) < tie(b.x, b.y);
+}
+
+basic_iostream<char>::basic_ostream &operator<<(basic_iostream<char>::basic_ostream &out, const GridLocation &loc)
+{
+    out << '(' << loc.x << ',' << loc.y << ')';
+    return out;
+}
+
+// This outputs a grid. Pass in a distances map if you want to print
+// the distances, or pass in a point_to map if you want to print
+// arrows that point to the parent location, or pass in a path vector
+// if you want to draw the path.
+template <class Graph>
+void draw_grid(const Graph &graph, int field_width,
+               map<GridLocation, double> *distances = nullptr,
+               map<GridLocation, GridLocation> *point_to = nullptr,
+               vector<GridLocation> *path = nullptr)
+{
+    for (int y = 0; y != graph.height; ++y)
+    {
+        for (int x = 0; x != graph.width; ++x)
+        {
+            GridLocation id{x, y};
+            cout << left << setw(field_width);
+            if (graph.walls.find(id) != graph.walls.end())
+            {
+                cout << string(field_width, '#');
+            }
+            else if (point_to != nullptr && point_to->count(id))
+            {
+                GridLocation next = (*point_to)[id];
+                if (next.x == x + 1)
+                {
+                    cout << "> ";
+                }
+                else if (next.x == x - 1)
+                {
+                    cout << "< ";
+                }
+                else if (next.y == y + 1)
+                {
+                    cout << "v ";
+                }
+                else if (next.y == y - 1)
+                {
+                    cout << "^ ";
+                }
+                else
+                {
+                    cout << "* ";
+                }
+            }
+            else if (distances != nullptr && distances->count(id))
+            {
+                cout << (*distances)[id];
+            }
+            else if (path != nullptr && find(path->begin(), path->end(), id) != path->end())
+            {
+                cout << '@';
+            }
+            else
+            {
+                cout << '.';
+            }
+        }
+        cout << '\n';
+    }
+}
+
+void add_rect(SquareGrid &grid, int x1, int y1, int x2, int y2)
+{
+    for (int x = x1; x < x2; ++x)
+    {
+        for (int y = y1; y < y2; ++y)
+        {
+            grid.walls.insert(GridLocation{x, y});
+        }
+    }
+}
+
+///////////////////////////////////////
+
+void loadMap(SquareGrid &grid)
+{
+    string fileName = "/home/vinicius/at_home_ws/src/tangent/world/map";
+    FILE *f = fopen(fileName.c_str(), "r");
+    int v;
+    for (int j = 0; j < GRID_HEIGHT; j++)
+    {
+        for (int i = 0; i < GRID_WIDTH; i++)
+        {
+            fscanf(f, "%d,", &v);
+            if (v == 2)
+            {
+                grid.walls.insert(GridLocation{i, j});
+            }
+        }
+        // printf("\n");
+    }
+    fclose(f);
+    // printf("\n\n");
+}
+
+SquareGrid make_diagram()
+{
+    SquareGrid grid(43, 33);
+    loadMap(grid);
+
+    cout << grid.walls.size() << '\n';
+    grid.walls.erase({0, 0});
+    cout << grid.walls.size() << '\n';
+
+    return grid;
+}
+
+template <typename Location>
+vector<Location> reconstruct_path(
+    Location start, Location goal,
+    map<Location, Location> came_from)
+{
+    vector<Location> path;
+    Location current = goal;
+    while (current != start)
+    {
+        path.push_back(current);
+        current = came_from[current];
+    }
+    path.push_back(start); // optional
+    reverse(path.begin(), path.end());
+    return path;
+}
+
+template <typename Location, typename Graph>
+map<Location, Location>
+breadth_first_search(Graph graph, Location start, Location goal)
+{
+    queue<Location> frontier;
+    frontier.push(start);
+
+    map<Location, Location> came_from;
+    came_from[start] = start;
+
+    while (!frontier.empty())
+    {
+        Location current = frontier.front();
+        frontier.pop();
+
+        if (current == goal)
+        {
+            break;
+        }
+
+        for (Location next : graph.neighbors(current))
+        {
+            if (came_from.find(next) == came_from.end())
+            {
+                frontier.push(next);
+                came_from[next] = current;
+            }
+        }
+    }
+    return came_from;
+}
+
 int main(int argc, char **argv)
 {
 
@@ -359,20 +600,34 @@ int main(int argc, char **argv)
     if (argc == 2)
     {
         printf("Iniciando limpeza do chao\n");
-        loadMap(argv[1]);
+        // loadMap(argv[1]);
 
-        for (signed i = (GRID_HEIGHT - 1); i > -1; i--)
-        {
-            for (unsigned j = 0; j < GRID_WIDTH; j++)
-            {
-                printf("%d ", gMap[i][j]);
-            }
-            printf("\n");
-        }
+        // for (signed i = (GRID_HEIGHT - 1); i > -1; i--)
+        // {
+        //     for (unsigned j = 0; j < GRID_WIDTH; j++)
+        //     {
+        //         // printf("%d ", gMap[i][j]);
+        //     }
+        //     // printf("\n");
+        // }
+
+        //////////////////////////////////////////////////////////////
+        GridLocation start{16, 16};
+        GridLocation goal{17, 30};
+        SquareGrid grid = make_diagram();
+        // printf("%d\n", gMap[12][7]); // remover depois de testes
+        auto came_from = breadth_first_search(grid, start, goal);
+        draw_grid(grid, 2, nullptr, &came_from);
+
+        cout << '\n';
+        vector<GridLocation> path = reconstruct_path(start, goal, came_from);
+        draw_grid(grid, 2, nullptr, nullptr, &path);
+        // return 0;
 
         srand(time(NULL));
         goalx = double(rand() % 150) / 10.0;
         goaly = double(rand() % 150) / 10.0;
+        //////////////////////////////////////////////////////////////
 
         // Printa o GOAL no terminal
         ROS_INFO("GOAL aleatorio: x=%lf, y=%lf", goalx, goaly);
@@ -422,6 +677,12 @@ int main(int argc, char **argv)
         robox = current_pose.pose.pose.position.x;                   // Posicao atual do robo em x
         roboy = current_pose.pose.pose.position.y;                   // Posicao atual do robo em y
 
+        mapRobox = int(robox * 2); // Converte a posicao atual em x para a posicao em i no mapa
+        mapRoboy = int(roboy * 2); // Converte a posicao atual em y para a posicao em j no mapa
+
+        mapGoalx = int(goalx * 2); // Converte a posicao em x do goal para a posicao em i no mapa
+        mapGoaly = int(goaly * 2); // Converte a posicao em y do goal para a posicao em j no mapa
+
         // Distancia do robo ate o goal global
         dist = sqrt((goalx - robox) * (goalx - robox) + (goaly - roboy) * (goaly - roboy));
 
@@ -436,6 +697,8 @@ int main(int argc, char **argv)
         // Estado que cuida do movimento ate o goal
         if (estado == 0)
         {
+
+            /*
             movetogoal(localx, localy, robox, roboy);
 
             // Se detecta obstaculo, muda para rotina de contorno de obstaculo
@@ -446,6 +709,7 @@ int main(int argc, char **argv)
             }
 
             // ROS_INFO("Frente=%lg Dist=%lg", frente, dist); // Debugging
+            */
         }
 
         // Estado que faz o contorno de obstaculos
