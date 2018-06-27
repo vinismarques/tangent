@@ -357,6 +357,7 @@ struct SquareGrid
 
     int width, height;
     set<GridLocation> walls;
+    set<GridLocation> notvisited;
 
     SquareGrid(int width_, int height_)
         : width(width_), height(height_) {}
@@ -505,6 +506,10 @@ void loadMap(SquareGrid &grid)
             {
                 grid.walls.insert(GridLocation{i, j});
             }
+            if (v == 0)
+            {
+                grid.notvisited.insert(GridLocation{i, j});
+            }
         }
         // printf("\n");
     }
@@ -517,9 +522,10 @@ SquareGrid make_diagram()
     SquareGrid grid(43, 33);
     loadMap(grid);
 
-    cout << grid.walls.size() << '\n';
-    grid.walls.erase({0, 0});
-    cout << grid.walls.size() << '\n';
+    // cout << grid.walls.size() << '\n';
+    // grid.walls.erase({0, 0});
+    // cout << grid.walls.size() << '\n';
+    cout << grid.notvisited.size() << '\n';
 
     return grid;
 }
@@ -573,6 +579,9 @@ breadth_first_search(Graph graph, Location start, Location goal)
     return came_from;
 }
 
+SquareGrid grid = make_diagram(); // Declara o mapa (grid) como variavel global
+vector<GridLocation> path; // Declara o caminho como variavel global
+
 int main(int argc, char **argv)
 {
 
@@ -614,23 +623,25 @@ int main(int argc, char **argv)
         //////////////////////////////////////////////////////////////
         GridLocation start{16, 16};
         GridLocation goal{17, 30};
-        SquareGrid grid = make_diagram();
+        // SquareGrid grid = make_diagram();
         // printf("%d\n", gMap[12][7]); // remover depois de testes
         auto came_from = breadth_first_search(grid, start, goal);
         draw_grid(grid, 2, nullptr, &came_from);
 
         cout << '\n';
-        vector<GridLocation> path = reconstruct_path(start, goal, came_from);
+        path = reconstruct_path(start, goal, came_from);
         draw_grid(grid, 2, nullptr, nullptr, &path);
         // return 0;
+        //////////////////////////////////////////////////////////////
 
         srand(time(NULL));
         goalx = double(rand() % 150) / 10.0;
         goaly = double(rand() % 150) / 10.0;
-        //////////////////////////////////////////////////////////////
-
+        
         // Printa o GOAL no terminal
         ROS_INFO("GOAL aleatorio: x=%lf, y=%lf", goalx, goaly);
+
+        cout << grid.notvisited.size() << '\n';
     }
     else
     {
@@ -694,22 +705,25 @@ int main(int argc, char **argv)
         erro_lin = sqrt(difx * difx + dify * dify); // Define o erro linear
         erro_ang = alfa - beta;                     // Define o erro angular
 
+        if(grid.notvisited.empty()){
+            estado = 2;
+        }
+
+        
+
         // Estado que cuida do movimento ate o goal
         if (estado == 0)
         {
+            // movetogoal(localx, localy, robox, roboy);
 
-            /*
-            movetogoal(localx, localy, robox, roboy);
+            // // Se detecta obstaculo, muda para rotina de contorno de obstaculo
+            // if (frente < tol + 0.1 || esq45 < tol || dir45 < tol)
+            // {
+            //     ROS_INFO("Obstaculo detectado. Iniciando rotina de contorno.");
+            //     estado = 1;
+            // }
 
-            // Se detecta obstaculo, muda para rotina de contorno de obstaculo
-            if (frente < tol + 0.1 || esq45 < tol || dir45 < tol)
-            {
-                ROS_INFO("Obstaculo detectado. Iniciando rotina de contorno.");
-                estado = 1;
-            }
-
-            // ROS_INFO("Frente=%lg Dist=%lg", frente, dist); // Debugging
-            */
+            // // ROS_INFO("Frente=%lg Dist=%lg", frente, dist); // Debugging
         }
 
         // Estado que faz o contorno de obstaculos
