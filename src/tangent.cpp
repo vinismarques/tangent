@@ -1,7 +1,9 @@
 //
 // TO-DO:   corrigir sentido de rotacao (escolher menor lado)
-//          verificar rand()
-//          corrigir comportamento no segue parede?
+//          rotacao indo pro lado oposto causando overshoot!!!
+//
+//
+//          Revisar codigo passo a passo
 //
 
 #include <cstdio>
@@ -43,20 +45,21 @@ const int GRID_WIDTH = 43,
 nav_msgs::Odometry current_pose;
 sensor_msgs::LaserScan current_laser;
 double v1 = 0.0, v2 = 0.0; // Velocidades
-double tol = 0.4;          // Distancia de tolerancia do robo ate a parede
+double tol = 0.05;         // Distancia de tolerancia do robo ate a parede
 double alfa, beta;         // alfa = angulo do goal local em relacao ao robo. beta = angulo do robo em relacao ao frame
 int estado = 0;            // Variavel utilizada na maquina de estados
 int mapRobox, mapRoboy,
     mapGoalx, mapGoaly; // Variavel da posicao do mapa
+int step = 0;           // Passo atual da trajetoria encontrada
 bool seguir_esquerda = false, seguir_direita = false, rotate2follow = true, create_rotation_target = true;
-double prec_ang = 0.1, prec_lin = 0.1;    // Precisoes exigidas que os controladores respeitem
-double kp1 = 0.9,                         // kp1: ganho proporcional do controle linear
+double prec_ang = 0.5, prec_lin = 0.03;   // Precisoes exigidas que os controladores respeitem
+double kp1 = 5.0,                         // kp1: ganho proporcional do controle linear
     kp2 = 0.06;                           // kp2: ganho proporcional do controle angular
 double ki1 = 0.0,                         // ki1: ganho integal do controle linear
     ki2 = 0.0,                            // ki2: ganho integral do controle angular
-    integral1 = 0.5,                      // integral do erro linear
-    integral2 = 0.5,                      // integral do erro angular
-    dt = 1;                               // constante de tempo
+    integral1 = 0,                        // integral do erro linear
+    integral2 = 0,                        // integral do erro angular
+    dt = 0.1;                             // constante de tempo
 double orientacao;                        // Orientacao do robo em radianos
 double erro_lin, erro_ang;                // Erro linear e erro angular
 double difx, dify;                        // Diferenca da posicao do robo e do goal local
@@ -140,6 +143,7 @@ double rotaciona(double erro_ang, double prec_ang, double kp2)
         }
         else // Rotaciona no sentido horario
         {
+            // cout << "\nENTROU! Rotacionando anti-horario\n";
             integral2 += modulo(erro_ang * dt);
             return -modulo(erro_ang) * (kp2 + ki2 * integral2);
         }
@@ -181,6 +185,7 @@ void movetogoal(double localx, double localy, double robox, double roboy)
         if (modulo(erro_lin) < prec_lin) // Chegou no goal, vai para o estado final
         {
             v1 = 0.0;
+            v2 = 0;
             estado = 2;
         }
         else // Continua movimento linear
@@ -207,7 +212,7 @@ void define_rotation_target(double x)
     localx = robox + 0.1 * cos((beta + x) * M_PI / 180);
     localy = roboy + 0.1 * sin((beta + x) * M_PI / 180);
 }
-
+/*
 // Rotina que faz o robo seguir a parede que esta a sua esquerda
 double segue_parede_esquerda(double tol)
 {
@@ -345,6 +350,39 @@ double segue_parede_direita(double tol)
         ROS_INFO("O robo chegou o mais proximo possivel do goal."); // Debugging
     }
 }
+*/
+void calcula_erro_ang()
+{
+    // Descomentar este trecho se rotacao estiver funcionando mal
+    // if (alfa < 0 && orientacao < 0)
+    // {
+    //     alfa = (2 * M_PI + alfa);
+    //     orientacao = (2 * M_PI + orientacao);
+    // }
+    // else
+    // {
+    //     if (alfa < 0)
+    //     {
+    //         alfa = (2 * M_PI + alfa);
+    //     }
+    //     else if (orientacao < 0)
+    //     {
+    //         orientacao = (2 * M_PI + orientacao);
+    //     }
+    // }
+
+    erro_ang = (alfa - orientacao) * 180 / M_PI;
+
+    // Corrige de acordo com circulo trigonometrico
+    if (erro_ang > 180)
+    {
+        erro_ang = erro_ang - 360;
+    }
+    if (erro_ang < -180)
+    {
+        erro_ang = erro_ang + 360;
+    }
+}
 
 struct GridLocation
 {
@@ -479,16 +517,16 @@ void draw_grid(const Graph &graph, int field_width,
     }
 }
 
-void add_rect(SquareGrid &grid, int x1, int y1, int x2, int y2)
-{
-    for (int x = x1; x < x2; ++x)
-    {
-        for (int y = y1; y < y2; ++y)
-        {
-            grid.walls.insert(GridLocation{x, y});
-        }
-    }
-}
+// void add_rect(SquareGrid &grid, int x1, int y1, int x2, int y2)
+// {
+//     for (int x = x1; x < x2; ++x)
+//     {
+//         for (int y = y1; y < y2; ++y)
+//         {
+//             grid.walls.insert(GridLocation{x, y});
+//         }
+//     }
+// }
 
 ///////////////////////////////////////
 
@@ -579,8 +617,24 @@ breadth_first_search(Graph graph, Location start, Location goal)
     return came_from;
 }
 
+double map2pos(double i)
+{
+    return i / 2 + 0.25;
+}
+
+//////////////////////////////// globais custom ////////////////////////////////
 SquareGrid grid = make_diagram(); // Declara o mapa (grid) como variavel global
-vector<GridLocation> path; // Declara o caminho como variavel global
+vector<GridLocation> path;        // Declara o caminho como variavel global
+
+void nextstep()
+{
+    ROS_WARN("step:%d path.x:%d path.y:%d", step, path[step].x, path[step].y);
+    localx = map2pos(path[step].x);
+    localy = map2pos(path[step].y);
+    ROS_INFO("localx:%lg localy:%lg", localx, localy);
+    step++;
+    return;
+}
 
 int main(int argc, char **argv)
 {
@@ -635,13 +689,13 @@ int main(int argc, char **argv)
         //////////////////////////////////////////////////////////////
 
         srand(time(NULL));
-        goalx = double(rand() % 150) / 10.0;
-        goaly = double(rand() % 150) / 10.0;
-        
-        // Printa o GOAL no terminal
-        ROS_INFO("GOAL aleatorio: x=%lf, y=%lf", goalx, goaly);
+        // goalx = double(rand() % 150) / 10.0;
+        // goaly = double(rand() % 150) / 10.0;
 
-        cout << grid.notvisited.size() << '\n';
+        // Printa o GOAL no terminal
+        // ROS_INFO("GOAL aleatorio: x=%lf, y=%lf", goalx, goaly);
+
+        // cout << grid.notvisited.size() << '\n';
     }
     else
     {
@@ -659,8 +713,17 @@ int main(int argc, char **argv)
     }
 
     // Inicializa goal local com valores do goal global
-    localx = goalx;
-    localy = goaly;
+    // localx = goalx;
+    // localy = goaly;
+    goalx = map2pos(path[step].x);
+    goaly = map2pos(path[step].y);
+    // localx = map2pos(path[step].x);
+    // localy = map2pos(path[step].y);
+    // ROS_INFO("%d", step);
+    // step++;
+    // ROS_INFO("%d", step);
+    nextstep();
+    // ROS_INFO("%lg %lg", localx, localy);
 
     // Wait sensors be ready
     while (!laserReady || !odomReady)
@@ -688,68 +751,127 @@ int main(int argc, char **argv)
         robox = current_pose.pose.pose.position.x;                   // Posicao atual do robo em x
         roboy = current_pose.pose.pose.position.y;                   // Posicao atual do robo em y
 
-        mapRobox = int(robox * 2); // Converte a posicao atual em x para a posicao em i no mapa
-        mapRoboy = int(roboy * 2); // Converte a posicao atual em y para a posicao em j no mapa
+        GridLocation grid_current{int(robox * 2), int(roboy * 2)}; // Posicao atual na grid
+        GridLocation grid_goal{int(goalx * 2), int(goaly * 2)};    // Goal global na grid
+        GridLocation grid_local{int(localx * 2), int(localx * 2)}; // Goal local na grid
 
-        mapGoalx = int(goalx * 2); // Converte a posicao em x do goal para a posicao em i no mapa
-        mapGoaly = int(goaly * 2); // Converte a posicao em y do goal para a posicao em j no mapa
+        // cout << grid_current.x << "\n";
 
         // Distancia do robo ate o goal global
         dist = sqrt((goalx - robox) * (goalx - robox) + (goaly - roboy) * (goaly - roboy));
 
         // Relacoes entre robo e goal local
-        difx = localx - robox;                      // Diferenca entre posicao x do goal local e do robo
-        dify = localy - roboy;                      // Diferenca entre posicao y do goal local e do robo
-        alfa = atan2(dify, difx);                   // Angulo alfa pode ser calculado com a tangente
-        alfa = graus(alfa);                         // Converte de radianos para graus
+        difx = localx - robox;    // Diferenca entre posicao x do goal local e do robo
+        dify = localy - roboy;    // Diferenca entre posicao y do goal local e do robo
+        alfa = atan2(dify, difx); // Angulo alfa pode ser calculado com a tangente
+        // alfa = atan2(modulo(dify), modulo(difx));   // Angulo alfa pode ser calculado com a tangente
+        ROS_INFO("ANTES: orientacao=%lg alfa=%lg alfa-ori=%lg", orientacao, alfa, alfa - orientacao);
+
+        // Define o erro angular
+        // if (alfa < 0 && orientacao > 0) {
+        //     alfa = (2 * M_PI + alfa);
+        //     // cout << 2 * M_PI + alfa << '\n';
+        // }
+
+        // if (alfa < 0 && orientacao < 0)
+        // {
+        //     alfa = (2 * M_PI + alfa);
+        //     orientacao = (2 * M_PI + orientacao);
+        // }
+        // else
+        // {
+        //     if (alfa < 0)
+        //     {
+        //         alfa = (2 * M_PI + alfa);
+        //     }
+        //     else if (orientacao < 0)
+        //     {
+        //         orientacao = (2 * M_PI + orientacao);
+        //     }
+        // }
+        // erro_ang = (alfa - orientacao) * 180 / M_PI;
+        // if (erro_ang > 180){
+        //     erro_ang = erro_ang - 360;
+        // }
+        // if (erro_ang < -180)
+        // {
+        //     erro_ang = erro_ang + 360;
+        // }
+        calcula_erro_ang();
+
+        ROS_INFO("DEPOIS: orientacao=%lg alfa=%lg alfa-ori=%lg", orientacao, alfa, alfa - orientacao);
+
+        // ROS_INFO("alfa antes: %lg", alfa);
+        alfa = graus(alfa); // Converte de radianos para graus
+        // ROS_INFO("alfa em graus: %lg", alfa);
         erro_lin = sqrt(difx * difx + dify * dify); // Define o erro linear
-        erro_ang = alfa - beta;                     // Define o erro angular
+        // erro_ang = alfa - beta;                     // Define o erro angular
+        ROS_INFO("erro_ang: %lg", erro_ang);
+        ROS_INFO("beta=%lg alfa=%lg erro=%lg", beta, alfa, erro_ang);
+        // ROS_INFO("difx=%lg dify=%lg", difx, dify);
+        // ROS_INFO("v1=%lg v2=%lg", v1, v2);
 
-        if(grid.notvisited.empty()){
-            estado = 2;
+        // cout << '\n';
+
+        grid.notvisited.erase(grid_current); // Remove os locais já visitados
+
+        // path.erase();
+        // cout << grid.notvisited.size() << "\n";
+
+        // Testing code //
+        // grid_local = path[step];
+        // ROS_INFO("%lg %lg", robox, roboy);
+
+        // for (size_t i = 0; i < path.size(); i++)
+        // {
+        //     cout << path[i].x << " " << path[i].y << "\n";
+        // }
+
+        if (grid.notvisited.empty())
+        {
+            // ENCERRAR ROS - VISITOU TODOS OS LOCAIS POSSIVEIS
+            return 0;
         }
-
-        
 
         // Estado que cuida do movimento ate o goal
         if (estado == 0)
         {
-            // movetogoal(localx, localy, robox, roboy);
+            movetogoal(localx, localy, robox, roboy);
 
-            // // Se detecta obstaculo, muda para rotina de contorno de obstaculo
+            // Se detecta obstaculo, muda para rotina de contorno de obstaculo
             // if (frente < tol + 0.1 || esq45 < tol || dir45 < tol)
             // {
             //     ROS_INFO("Obstaculo detectado. Iniciando rotina de contorno.");
             //     estado = 1;
             // }
 
-            // // ROS_INFO("Frente=%lg Dist=%lg", frente, dist); // Debugging
+            // ROS_INFO("Frente=%lg Dist=%lg", frente, dist); // Debugging
         }
 
         // Estado que faz o contorno de obstaculos
-        if (estado == 1)
-        {
-            segue_parede_esquerda(tol);
-            // segue_parede_direita(tol);
+        // if (estado == 1)
+        // {
+        //     segue_parede_esquerda(tol);
+        //     // segue_parede_direita(tol);
 
-            // Para laser frontal. Para outros seria necessario multiplicar por sin e cos do angulo relativo
-            alfa_laser = graus(atan2(goaly - roboy, goalx - robox));
-            erro_ang_global = alfa_laser - beta; // Somar/subtrair beta para fazer o mesmo com outros angulos
+        //     // Para laser frontal. Para outros seria necessario multiplicar por sin e cos do angulo relativo
+        //     alfa_laser = graus(atan2(goaly - roboy, goalx - robox));
+        //     erro_ang_global = alfa_laser - beta; // Somar/subtrair beta para fazer o mesmo com outros angulos
 
-            // Se detecta que o caminho ate o goal esta limpo, muda para rotina movetogoal
-            if (modulo(erro_ang_global) <= 4) // Threshold do erro do angulo
-            {
-                // ROS_INFO("frente=%lg dist=%lg", alfa_laser, erro_ang_global);
-                if (frente >= dist && esq45 > tol) // Vai para a rotina movetogoal
-                {
-                    ROS_INFO("Caminho ate o goal livre. Iniciando rotina movetogoal.");
-                    localx = goalx;
-                    localy = goaly;
-                    estado = 0;
-                }
-                // ROS_INFO("Validou entrada no threshold do erro do angulo.");
-            }
-        }
+        //     // Se detecta que o caminho ate o goal esta limpo, muda para rotina movetogoal
+        //     if (modulo(erro_ang_global) <= 4) // Threshold do erro do angulo
+        //     {
+        //         // ROS_INFO("frente=%lg dist=%lg", alfa_laser, erro_ang_global);
+        //         if (frente >= dist && esq45 > tol) // Vai para a rotina movetogoal
+        //         {
+        //             ROS_INFO("Caminho ate o goal livre. Iniciando rotina movetogoal.");
+        //             localx = goalx;
+        //             localy = goaly;
+        //             estado = 0;
+        //         }
+        //         // ROS_INFO("Validou entrada no threshold do erro do angulo.");
+        //     }
+        // }
 
         // ROS_INFO("ESTADO = %d", estado); // Debugging
         // ROS_INFO("v1=%lg v2=%lg", v1, v2); // Debugging
@@ -759,17 +881,32 @@ int main(int argc, char **argv)
         {
             ROS_WARN("O robo chegou ao GOAL!");
 
-            goalx = double(rand() % 150) / 10.0;
-            goaly = double(rand() % 150) / 10.0;
-            // Printa o GOAL no terminal
-            ROS_INFO("GOAL aleatorio: x=%lf, y=%lf", goalx, goaly);
+            if (step + 1 == path.size())
+            {
+                return 0;
+            }
 
-            localx = goalx;
-            localy = goaly;
+            // ROS_INFO("Goal antigo: %lg %lg", localx, localy);
+            // ROS_INFO("xy: %lg %lg", robox, roboy);
+
+            // goalx = double(rand() % 150) / 10.0;
+            // goaly = double(rand() % 150) / 10.0;
+            // Printa o GOAL no terminal
+            // ROS_INFO("GOAL aleatorio: x=%lf, y=%lf", goalx, goaly);
+
+            nextstep();
+            // localx = map2pos(path[step].x);
+            // localy = map2pos(path[step].y);
+            // step++;
+            ROS_INFO("Novo goal local: %lg %lg", localx, localy);
+
             estado = 0;
 
             // return 0;
         }
+
+        ROS_INFO("v1=%lg v2=%lg", v1, v2);
+        cout << '\n';
 
         // Envia Sinal de Velocidade
         speed_create.linear.x = v1;
