@@ -1,3 +1,5 @@
+// Definir rotina de novos targets nao visitados
+
 #include <cstdio>
 #include <cstdlib>
 #include <ctime>
@@ -37,7 +39,7 @@ const int GRID_WIDTH = 43,
 nav_msgs::Odometry current_pose;
 sensor_msgs::LaserScan current_laser;
 double v1 = 0.0, v2 = 0.0; // Velocidades
-double tol = 0.05;         // Distancia de tolerancia do robo ate a parede
+double tol = 0.25;         // Distancia de tolerancia do robo ate a parede
 double alfa, beta;         // alfa = angulo do goal local em relacao ao robo. beta = angulo do robo em relacao ao frame
 int estado = 0;            // Variavel utilizada na maquina de estados
 int mapRobox, mapRoboy,
@@ -61,6 +63,7 @@ double dist;                              // Distancia entre o robo e goal globa
 double angulo = -45;                      // Valor inicial da variavel angulo. Utilizada para criar targets de rotacao
 float esq90, esq45, frente, dir45, dir90; // Variaveis de leitura do sensor laser
 bool laserReady = false, odomReady = false;
+int visitado[GRID_WIDTH][GRID_HEIGHT];
 
 //Funcao Callback do Laser
 void lasercallback(const sensor_msgs::LaserScan::ConstPtr &laser)
@@ -167,13 +170,13 @@ void movetogoal(double localx, double localy, double robox, double roboy)
     }
 
     // Checa se o goal e alcancavel, se nao, retorna que chegou o mais proximo possivel
-    if ((frente || esq45 || dir45) < tol && dist < 1.5)
-    {
-        v1 = 0;
-        v2 = 0;
-        estado = 2;
-        ROS_WARN("O robo chegou o mais proximo possivel do goal.");
-    }
+    // if ((frente) < tol && dist < 1.5)
+    // {
+    //     v1 = 0;
+    //     v2 = 0;
+    //     estado = 2;
+    //     ROS_WARN("O robo chegou o mais proximo possivel do goal.");
+    // }
 
     // ROS_INFO("beta=%lg alfa=%lg erro_ang=%lg erro_lin=%lg", beta, alfa, erro_ang, erro_lin); // Debugging
 }
@@ -365,10 +368,12 @@ void loadMap(SquareGrid &grid)
             if (v == 2)
             {
                 grid.walls.insert(GridLocation{i, j});
+                visitado[i][j] = 1;
             }
             if (v == 0)
             {
                 grid.notvisited.insert(GridLocation{i, j});
+                visitado[i][j] = 0;
             }
         }
     }
@@ -449,9 +454,8 @@ set<GridLocation>::iterator setIt;
 GridLocation grid_current;
 GridLocation grid_local;
 
-    // Busca proximo passo do path planning
-    void
-    nextstep()
+// Busca proximo passo do path planning
+void nextstep()
 {
     ROS_WARN("step:%d path.x:%d path.y:%d", step, path[step].x, path[step].y);
     localx = map2pos(path[step].x);
@@ -464,10 +468,25 @@ GridLocation grid_local;
 void nextgoal()
 {
     // setar goal como primeira posicao do notvisited e remove-lo depois de visitar
+    // cout << "Novo goal: " << *setIt << endl;
+    GridLocation goal;
+    for (int i = 0; i < GRID_WIDTH; i++)
+    {
+        for (int j = 0; j < GRID_HEIGHT; j++)
+        {
+            if (visitado[i][j] == 0)
+            {
+                goal = {i, j};
+                i = GRID_WIDTH;
+                j = GRID_HEIGHT;
+            }
+        }
+    }
+    cout << "Goal do for: " << goal << endl;
 
     GridLocation start = grid_current;
     // GridLocation goal{17, 30};
-    GridLocation goal = *setIt;
+    // GridLocation goal = *setIt;
 
     auto came_from = breadth_first_search(grid, start, goal);
     draw_grid(grid, 2, nullptr, &came_from);
@@ -503,11 +522,41 @@ int main(int argc, char **argv)
     double erro_ang_global;            // Erro angular entre o feixe de laser e o goal global
 
     // Verifica se e para entrar na rotina de limpeza
-    if (argc == 2)
+    if (argc == 1)
     {
         printf("Iniciando limpeza do chao\n");
 
         setIt = grid.notvisited.begin();
+        // cout << *setIt << endl;
+        // setIt = grid.notvisited.erase(setIt);
+        // cout << *setIt << endl;
+        // setIt++;
+        // cout << *setIt << endl
+        //      << endl;
+        // cout << endl;
+
+        // set<GridLocation, int>::iterator it;
+        // set<GridLocation, int> notvis;
+        // notvis.insert(GridLocation{i, j}, 0);
+        // it = notvis.begin();
+        // cout << *it << endl;
+        // for (setIt = grid.notvisited.begin(); setIt != grid.notvisited.end(); setIt++)
+        // {
+        //     cout << *setIt << endl;
+        // }
+
+        //inicializacao
+        // for (int j = 0; j < GRID_HEIGHT; j++)
+        // {
+        //     for (int i = 0; i < GRID_WIDTH; i++)
+        //     {
+        //         visitado[i][j] = 0;
+        //     }
+        // }
+
+        visitado[grid_current.x][grid_current.y] = 1;
+
+        // return 0;
 
         grid_current = {16, 16}; // Posicao inicial do robo na grid
 
@@ -601,7 +650,7 @@ int main(int argc, char **argv)
         grid_local = {int(localx * 2), int(localx * 2)}; // Goal local na grid
 
         // Distancia do robo ate o goal global
-        dist = sqrt((goalx - robox) * (goalx - robox) + (goaly - roboy) * (goaly - roboy));
+        dist = sqrt((localx - robox) * (localx - robox) + (localy - roboy) * (localy - roboy));
 
         // Relacoes entre robo e goal local
         difx = localx - robox;                      // Diferenca entre posicao x do goal local e do robo
@@ -610,12 +659,14 @@ int main(int argc, char **argv)
         erro_ang = calcula_erro_ang();              // Calcula erro angular
         erro_lin = sqrt(difx * difx + dify * dify); // Calcula erro linear
 
+        visitado[grid_current.x][grid_current.y] = 1; // Marca a posicao atual do mapa como visitada
+
         // if (grid.notvisited.find(grid_current) != grid.notvisited.end())
         // {
         //     ROS_WARN("Encontrado");
         // }
 
-        grid.notvisited.erase(grid_current); // Remove os locais já visitados
+        // grid.notvisited.erase(grid_current); // Remove os locais já visitados
 
         // if (grid.notvisited.find(grid_current) == grid.notvisited.end()){
         //     ROS_INFO("Removido com sucesso");
@@ -647,7 +698,7 @@ int main(int argc, char **argv)
         // Estado final, encerra o nodo
         if (estado == 2)
         {
-            ROS_WARN("O robo chegou ao GOAL!");
+            ROS_WARN("O robo chegou ao GOAL local!");
             ROS_INFO("Goal antigo: %lg %lg", localx, localy);
             ROS_INFO("xy: %lg %lg", robox, roboy);
             if (step == path.size())
@@ -667,7 +718,7 @@ int main(int argc, char **argv)
             // localx = map2pos(path[step].x);
             // localy = map2pos(path[step].y);
             // step++;
-            ROS_INFO("Novo goal local: %lg %lg", localx, localy);
+            ROS_INFO("Novo goal local: %lg %lg\n", localx, localy);
 
             estado = 0;
 
