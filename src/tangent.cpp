@@ -196,28 +196,28 @@ double calcula_erro_ang()
         alfa = (2 * M_PI + alfa);
         orientacao = (2 * M_PI + orientacao);
     }
-    else
-    {
-        if (alfa < 0)
-        {
-            alfa = (2 * M_PI + alfa);
-        }
-        else if (orientacao < 0)
-        {
-            orientacao = (2 * M_PI + orientacao);
-        }
-    }
+    // else
+    // {
+    //     if (alfa < 0)
+    //     {
+    //         alfa = (2 * M_PI + alfa);
+    //     }
+    //     else if (orientacao < 0)
+    //     {
+    //         orientacao = (2 * M_PI + orientacao);
+    //     }
+    // }
 
-    return (alfa - orientacao) * 180 / M_PI;
+    erro_ang = (alfa - orientacao) * 180 / M_PI;
 
     // Corrige de acordo com circulo trigonometrico
     if (erro_ang > 180)
     {
-        return erro_ang - 360;
+        erro_ang = erro_ang - 360;
     }
     if (erro_ang < -180)
     {
-        return erro_ang + 360;
+        erro_ang = erro_ang + 360;
     }
 }
 
@@ -457,7 +457,29 @@ GridLocation grid_local;
 // Busca proximo passo do path planning
 void nextstep()
 {
-    ROS_WARN("step:%d path.x:%d path.y:%d", step, path[step].x, path[step].y);
+    // int aux = step;
+    ROS_WARN("step ANTES:%d path.x:%d path.y:%d", step, path[step].x, path[step].y);
+    // Teste de otimizacao de steps
+    if (path[step - 1].x == path[step].x && path[step].x == path[step + 1].x)
+    {
+        while (path[step - 1].x == path[step].x && path[step].x == path[step + 1].x)
+        {
+            step++;
+        }
+    }
+    else if (path[step - 1].y == path[step].y && path[step].y == path[step + 1].y)
+    {
+        while (path[step - 1].y == path[step].y && path[step].y == path[step + 1].y)
+        {
+            step++;
+        }
+    }
+    // while (path[step].y == path[step + 1].y || path[step].x == path[step + 1].x)
+    // {
+    //     step++;
+    // }
+
+    ROS_WARN("step DEPOIS:%d path.x:%d path.y:%d", step, path[step].x, path[step].y);
     localx = map2pos(path[step].x);
     localy = map2pos(path[step].y);
     ROS_INFO("localx:%lg localy:%lg", localx, localy);
@@ -487,6 +509,7 @@ void nextgoal()
     GridLocation start = grid_current;
     // GridLocation goal{17, 30};
     // GridLocation goal = *setIt;
+    goal = {37, 28}; // TESTE
 
     auto came_from = breadth_first_search(grid, start, goal);
     draw_grid(grid, 2, nullptr, &came_from);
@@ -653,10 +676,13 @@ int main(int argc, char **argv)
         dist = sqrt((localx - robox) * (localx - robox) + (localy - roboy) * (localy - roboy));
 
         // Relacoes entre robo e goal local
-        difx = localx - robox;                      // Diferenca entre posicao x do goal local e do robo
-        dify = localy - roboy;                      // Diferenca entre posicao y do goal local e do robo
-        alfa = atan2(dify, difx);                   // Angulo alfa pode ser calculado com a tangente
-        erro_ang = calcula_erro_ang();              // Calcula erro angular
+        difx = localx - robox;    // Diferenca entre posicao x do goal local e do robo
+        dify = localy - roboy;    // Diferenca entre posicao y do goal local e do robo
+        alfa = atan2(dify, difx); // Angulo alfa pode ser calculado com a tangente
+        // ROS_INFO("ANTES: orientacao=%lg alfa=%lg alfa-ori=%lg", orientacao, alfa, alfa - orientacao);
+        calcula_erro_ang(); // Calcula erro angular
+        // ROS_INFO("DEPOIS: orientacao=%lg alfa=%lg alfa-ori=%lg", orientacao, alfa, alfa - orientacao);
+        // ROS_INFO("erro_ang=%lg", erro_ang);
         erro_lin = sqrt(difx * difx + dify * dify); // Calcula erro linear
 
         visitado[grid_current.x][grid_current.y] = 1; // Marca a posicao atual do mapa como visitada
